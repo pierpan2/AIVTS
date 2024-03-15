@@ -15,10 +15,10 @@ import blivedm.models.web as web_models
 session: Optional[aiohttp.ClientSession] = None
 
 
-async def listen(room_id, cookie, stop_event):
+async def listen(room_id, cookie, stop_event, callback):
     init_session(cookie)
     try:
-        await run_single_client(room_id, stop_event)
+        await run_single_client(room_id, stop_event, callback)
     finally:
         await session.close()
 
@@ -33,7 +33,7 @@ def init_session(cookie):
     session.cookie_jar.update_cookies(cookies)
 
 
-async def run_single_client(room_id, stop_event):
+async def run_single_client(room_id, stop_event, callback):
     """
     演示监听一个直播间
     """
@@ -41,7 +41,7 @@ async def run_single_client(room_id, stop_event):
     # Get room id
     room_id = room_id
     client = blivedm.BLiveClient(room_id, session=session)
-    handler = MyHandler()
+    handler = MyHandler(callback)
     client.set_handler(handler)
 
     client.start()
@@ -65,20 +65,27 @@ class MyHandler(blivedm.BaseHandler):
     #           f" uname={command['data']['uname']}")
     # _CMD_CALLBACK_DICT['INTERACT_WORD'] = __interact_word_callback  # noqa
 
+    def __init__(self, callback):
+        self.callback = callback
+
     def _on_heartbeat(self, client: blivedm.BLiveClient, message: web_models.HeartbeatMessage):
         print(f'[{client.room_id}] 心跳')
-        # put_text(f'[{client.room_id}] 心跳')
+        self.callback('心跳')
 
     def _on_danmaku(self, client: blivedm.BLiveClient, message: web_models.DanmakuMessage):
         print(f'[{client.room_id}] {message.uname}：{message.msg}')
+        self.callback(message)
 
     def _on_gift(self, client: blivedm.BLiveClient, message: web_models.GiftMessage):
         print(f'[{client.room_id}] {message.uname} 赠送{message.gift_name}x{message.num}'
               f' （{message.coin_type}瓜子x{message.total_coin}）')
+        self.callback(message)
 
     def _on_buy_guard(self, client: blivedm.BLiveClient, message: web_models.GuardBuyMessage):
         print(f'[{client.room_id}] {message.username} 购买{message.gift_name}')
+        self.callback(message)
 
     def _on_super_chat(self, client: blivedm.BLiveClient, message: web_models.SuperChatMessage):
         print(f'[{client.room_id}] 醒目留言 ¥{message.price} {message.uname}：{message.message}')
+        self.callback(message)
 
